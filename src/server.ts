@@ -9,7 +9,7 @@ import * as jwt from 'jsonwebtoken';
 import multer, { FileFilterCallback } from 'multer';
 import helmet from 'helmet';
 import cors from 'cors';
-import rateLimit, { ipKeyGenerator } from "express-rate-limit";
+import rateLimit from "express-rate-limit";
 import { Strategy as JwtStrategy, ExtractJwt } from "passport-jwt";
 import compression from 'compression';
 import { z, ZodError } from 'zod';
@@ -4758,6 +4758,7 @@ const paginateResults = (results: any[], limit: number, cursor?: string) => {
     nextCursor: endIndex < results.length ? paginatedResults[paginatedResults.length - 1].id : null
   };
 };
+keyGenerator: (req: Request) => req.ip || 'unknown-ip'
 // CLI commands
 async function handleCliCommands() {
   if (process.argv.includes('--seed-only')) {
