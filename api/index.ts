@@ -3822,8 +3822,9 @@ class AuthMiddleware {
 
   static initializePassport() {
     // Local  for email/password login
-    passport.use(
-      new Local(
+    // استبدال السطر 3826 بـ:
+passport.use(
+  new LocalStrategy(
         {
           usernameField: 'email',
           passwordField: 'password'
@@ -3831,11 +3832,12 @@ class AuthMiddleware {
         async (email: string, password: string, done: (error: any, user?: any) => void) => {
           try {
             const user = await userRepo.findByEmail(email);
-            if (!user) return done(null, false, { message: 'Invalid credentials' });
-            if (user.isBlocked) return done(null, false, { message: 'User blocked' });
+            if (!user) // استبدال جميع الأسطر بـ:
+      return done(null, false);
+            if (user.isBlocked) return done(null, false);
 
             const match = await bcrypt.compare(password, user.passwordHash);
-            if (!match) return done(null, false, { message: 'Invalid credentials' });
+            if (!match) // استبدال جميع الأسطر بـ: return done(null, false);
 
             return done(null, user);
           } catch (error) {
@@ -3848,8 +3850,9 @@ class AuthMiddleware {
     // JWT  for bearer token authentication
     // In AuthMiddleware, ensure JWT payload is properly parsed
 // In AuthMiddleware class
-  passport.use(
-    new Jwt(
+  // استبدال السطر 3852 بـ:
+passport.use(
+  new JwtStrategy(
       {
         jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
         secretOrKey: JWT_SECRET,
@@ -3924,7 +3927,8 @@ class UploadMiddleware {
   static setup() {
     const storage = multer.memoryStorage(); // Use memory storage for serverless environments
 
-    const fileFilter = (req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
+    // استبدال السطر 3927 بـ:
+const fileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
   const imageMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
   const videoMimes = ['video/mp4', 'video/quicktime', 'video/x-msvideo'];
   const docMimes = [
