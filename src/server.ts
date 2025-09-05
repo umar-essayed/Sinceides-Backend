@@ -102,7 +102,9 @@ try {
 }
 
 // باقي الكود...
-
+// Initialize Firebase Storage
+const bucket = admin.storage().bucket();
+const firebaseStorageService = new FirebaseStorageService(bucket);
 
 
 const db = admin.firestore();
@@ -131,13 +133,8 @@ const PORT = parseInt(process.env.PORT || '4000');
 const JWT_SECRET = process.env.JWT_SECRET || 'secret';
 const JWT_ACCESS_EXPIRY = process.env.JWT_ACCESS_EXPIRY || '15m';
 const JWT_REFRESH_EXPIRY = process.env.JWT_REFRESH_EXPIRY || '7d';
-const UPLOAD_DIR = process.env.VERCEL ? 
-  '/tmp/uploads' : 
-  process.env.UPLOAD_DIR || path.join(__dirname, 'uploads');
-
-const DATA_DIR = process.env.VERCEL ? 
-  '/tmp/data' : 
-  process.env.DATA_DIR || path.join(__dirname, 'data');
+const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, 'uploads');
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 
 // Create directories if not exists
 [UPLOAD_DIR, DATA_DIR, path.join(__dirname, 'logs')].forEach(dir => {
@@ -145,21 +142,17 @@ const DATA_DIR = process.env.VERCEL ?
 });
 
 // Logger setup
-const loggerTransports = process.env.VERCEL ? 
-  [new winston.transports.Console()] :
-  [
-    new winston.transports.Console(),
-    new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
-    new winston.transports.File({ filename: 'logs/combined.log' }),
-  ];
-
 const logger = winston.createLogger({
   level: 'info',
   format: winston.format.combine(
     winston.format.timestamp(),
     winston.format.json()
   ),
-  transports: loggerTransports,
+  transports: [
+    new winston.transports.Console(),
+    new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
+    new winston.transports.File({ filename: 'logs/combined.log' }),
+  ],
 });
 
 // Custom error class
@@ -1391,6 +1384,70 @@ async get<T>(key: string): Promise<T | null> {
 }
 
 // Services
+
+// Firebase Storage Service
+class FirebaseStorageService {
+  constructor(private bucket: admin.storage.Bucket) {}
+
+  async uploadFile(buffer: Buffer, fileName: string, destinationPath: string = 'uploads'): Promise<string> {
+    const filePath = `${destinationPath}/${Date.now()}_${fileName}`;
+    const file = this.bucket.file(filePath);
+    
+    await file.save(buffer, {
+      metadata: {
+        contentType: this.getContentType(fileName),
+      },
+    });
+
+    // Make the file publicly accessible
+    await file.makePublic();
+
+    // Return the public URL
+    return `https://storage.googleapis.com/${this.bucket.name}/${filePath}`;
+  }
+
+  async deleteFile(fileUrl: string): Promise<boolean> {
+    try {
+      // Extract file path from URL
+      const urlParts = fileUrl.split('/');
+      const filePath = urlParts.slice(4).join('/'); // Remove the https://storage.googleapis.com/bucket-name/ part
+      
+      const file = this.bucket.file(filePath);
+      await file.delete();
+      return true;
+    } catch (error) {
+      logger.error('Error deleting file from Firebase Storage:', error);
+      return false;
+    }
+  }
+
+  async uploadFromPath(filePath: string, destinationPath: string = 'uploads'): Promise<string> {
+    const fileName = path.basename(filePath);
+    const fileBuffer = fs.readFileSync(filePath);
+    return this.uploadFile(fileBuffer, fileName, destinationPath);
+  }
+
+  private getContentType(fileName: string): string {
+    const extension = fileName.split('.').pop()?.toLowerCase();
+    const contentTypes: { [key: string]: string } = {
+      'jpg': 'image/jpeg',
+      'jpeg': 'image/jpeg',
+      'png': 'image/png',
+      'gif': 'image/gif',
+      'webp': 'image/webp',
+      'pdf': 'application/pdf',
+      'doc': 'application/msword',
+      'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'zip': 'application/zip',
+      'mp4': 'video/mp4',
+      'mov': 'video/quicktime',
+      'avi': 'video/x-msvideo',
+    };
+    
+    return contentTypes[extension || ''] || 'application/octet-stream';
+  }
+}
+
 class AuthService {
   constructor(
     private userRepo: UserRepository,
@@ -1506,77 +1563,74 @@ class UserService {
     private enrollmentRepo: EnrollmentRepository,
     private conversationRepo: SupportConversationRepository,
     private cacheService: CacheService,
-    private activityLogRepo: ActivityLogRepository
+    private activityLogRepo: ActivityLogRepository,
+    private storageService: FirebaseStorageService
   ) {}
 
   async getUserById(id: string): Promise<UserDTO> {
     try {
-        // Validate input
-        if (!id || typeof id !== 'string') {
-            throw new HttpError(400, 'Invalid user ID');
-        }
+      if (!id || typeof id !== 'string') {
+        throw new HttpError(400, 'Invalid user ID');
+      }
 
-        // Check cache first
-        const cacheKey = `user:${id}`;
-        // In UserService.getUserById method
-const cached = await this.cacheService.get<UserDTO>(cacheKey);
-if (cached) {
-    logger.debug(`Retrieved user ${id} from cache`);
-    return cached;
-}
-// ... rest of the method remains the same
+      const cacheKey = `user:${id}`;
+      const cached = await this.cacheService.get<UserDTO>(cacheKey);
+      if (cached) {
+        logger.debug(`Retrieved user ${id} from cache`);
+        return cached;
+      }
 
-        // Get from database
-        const user = await this.userRepo.findById(id);
-        if (!user) {
-            logger.warn(`User not found: ${id}`);
-            throw new HttpError(404, 'User not found');
-        }
+      const user = await this.userRepo.findById(id);
+      if (!user) {
+        logger.warn(`User not found: ${id}`);
+        throw new HttpError(404, 'User not found');
+      }
 
-        // Validate user data
-        if (!user.id || !user.name || !user.email || !user.role) {
-            logger.error(`Invalid user data for ID: ${id}`, user);
-            throw new HttpError(500, 'Invalid user data');
-        }
+      if (!user.id || !user.name || !user.email || !user.role) {
+        logger.error(`Invalid user data for ID: ${id}`, user);
+        throw new HttpError(500, 'Invalid user data');
+      }
 
-        // Create DTO with proper null checks
-        const userDTO = new UserDTO(
-            user.id,
-            user.name,
-            user.email,
-            user.phoneNumber || '',
-            user.dateOfBirth || dayjs().toISOString(),
-            user.country || '',
-            user.gender || Gender.OTHER,
-            user.role,
-            user.profilePictureUrl || null,
-            user.isBlocked || false,
-            user.createdAt,
-            user.updatedAt,
-            user.assignedHrId || null
-        );
+      const userDTO = new UserDTO(
+        user.id,
+        user.name,
+        user.email,
+        user.phoneNumber || '',
+        user.dateOfBirth || dayjs().toISOString(),
+        user.country || '',
+        user.gender || Gender.OTHER,
+        user.role,
+        user.profilePictureUrl || null,
+        user.isBlocked || false,
+        user.createdAt,
+        user.updatedAt,
+        user.assignedHrId || null
+      );
 
-        // Update cache
-        try {
-            await this.cacheService.set(cacheKey, userDTO, REDIS_TTL_SINGLE);
-            logger.debug(`Cached user data for ID: ${id}`);
-        } catch (cacheError) {
-            logger.warn(`Failed to cache user data for ID: ${id}`, cacheError);
-            // Continue without failing if cache fails
-        }
+      try {
+        await this.cacheService.set(cacheKey, userDTO, REDIS_TTL_SINGLE);
+        logger.debug(`Cached user data for ID: ${id}`);
+      } catch (cacheError) {
+        logger.warn(`Failed to cache user data for ID: ${id}`, cacheError);
+      }
 
-        return userDTO;
+      return userDTO;
     } catch (error) {
-        if (error instanceof HttpError) {
-            throw error;
-        }
-        logger.error(`Error retrieving user ${id}:`, error);
-        throw new HttpError(500, 'Failed to retrieve user');
+      if (error instanceof HttpError) {
+        throw error;
+      }
+      logger.error(`Error retrieving user ${id}:`, error);
+      throw new HttpError(500, 'Failed to retrieve user');
     }
-}
+  }
+
   async updateUser(id: string, updateData: Partial<User> & { password?: string }): Promise<UserDTO> {
     const user = await this.userRepo.findById(id);
     if (!user) throw new HttpError(404, 'User not found');
+
+    if (updateData.profilePictureUrl && user.profilePictureUrl) {
+      await this.storageService.deleteFile(user.profilePictureUrl);
+    }
 
     if (updateData.email && updateData.email !== user.email) {
       const existing = await this.userRepo.findByEmail(updateData.email);
@@ -1600,6 +1654,30 @@ if (cached) {
     return this.getUserById(id);
   }
 
+  async getUsers(role?: Role, limit = 100, cursor?: string): Promise<UserDTO[]> {
+    const filters: Record<string, any> = {};
+    if (role) {
+      filters.role = role;
+    }
+
+    const { data } = await this.userRepo.findMany(filters, false, limit, cursor);
+    return data.map(user => new UserDTO(
+      user.id,
+      user.name,
+      user.email,
+      user.phoneNumber,
+      user.dateOfBirth,
+      user.country,
+      user.gender,
+      user.role,
+      user.profilePictureUrl,
+      user.isBlocked,
+      user.createdAt,
+      user.updatedAt,
+      user.assignedHrId
+    ));
+  }
+
   async blockUser(id: string): Promise<boolean> {
     const result = await this.userRepo.blockUser(id);
     if (!result) throw new HttpError(404, 'User not found');
@@ -1607,34 +1685,6 @@ if (cached) {
     await this.activityLogRepo.log(id, 'block_user', 'user', id);
     return result;
   }
-
-
-// Add to UserService
-async getUsers(role?: Role, limit = 100, cursor?: string): Promise<UserDTO[]> {
-  const filters: Record<string, any> = {};
-  if (role) {
-    filters.role = role;
-  }
-
-  const { data } = await this.userRepo.findMany(filters, false, limit, cursor);
-  return data.map(user => new UserDTO(
-    user.id,
-    user.name,
-    user.email,
-    user.phoneNumber,
-    user.dateOfBirth,
-    user.country,
-    user.gender,
-    user.role,
-    user.profilePictureUrl,
-    user.isBlocked,
-    user.createdAt,
-    user.updatedAt,
-    user.assignedHrId
-  ));
-}
-
-
 
   async unblockUser(id: string): Promise<boolean> {
     const result = await this.userRepo.unblockUser(id);
@@ -1645,10 +1695,16 @@ async getUsers(role?: Role, limit = 100, cursor?: string): Promise<UserDTO[]> {
   }
 
   async softDeleteUser(id: string): Promise<boolean> {
+    const user = await this.userRepo.findById(id);
+    if (!user) throw new HttpError(404, 'User not found');
+
+    if (user.profilePictureUrl) {
+      await this.storageService.deleteFile(user.profilePictureUrl);
+    }
+
     const result = await this.userRepo.softDelete(id);
     if (!result) throw new HttpError(404, 'User not found');
 
-    // Cascade delete enrollments and conversations
     const [enrollments, conversations] = await Promise.all([
       this.enrollmentRepo.findMany({ userId: id }),
       this.conversationRepo.findMany({ userId: id })
@@ -1687,38 +1743,35 @@ class CourseService {
     private categoryRepo: CategoryRepository,
     private cacheService: CacheService,
     private activityLogRepo: ActivityLogRepository,
-    private userRepo: UserRepository
+    private userRepo: UserRepository,
+    private storageService: FirebaseStorageService
   ) {}
 
-
-// وإضافة الدالة في CourseService
-async getCoursesPublic(limit = 100, cursor?: string): Promise<{ data: CourseDTO[]; nextCursor: string | null }> {
-  const { data, nextCursor } = await this.courseRepo.findMany({}, false, limit, cursor);
-  const dtos = data.map(c => this.mapToDTO(c));
-  return { data: dtos, nextCursor };
-}
-
-async createCourse(data: Omit<Course, keyof BaseEntity>): Promise<CourseDTO> {
-  // Validate instructor and category first
-  const instructor = await this.userRepo.findById(data.instructorId);
-  if (!instructor || instructor.role !== Role.INSTRUCTOR) {
-    throw new HttpError(400, 'Invalid instructor');
+  async getCoursesPublic(limit = 100, cursor?: string): Promise<{ data: CourseDTO[]; nextCursor: string | null }> {
+    const { data, nextCursor } = await this.courseRepo.findMany({}, false, limit, cursor);
+    const dtos = data.map(c => this.mapToDTO(c));
+    return { data: dtos, nextCursor };
   }
 
-  const category = await this.categoryRepo.findById(data.categoryId);
-  if (!category) throw new HttpError(400, 'Invalid category');
+  async createCourse(data: Omit<Course, keyof BaseEntity>): Promise<CourseDTO> {
+    const instructor = await this.userRepo.findById(data.instructorId);
+    if (!instructor || instructor.role !== Role.INSTRUCTOR) {
+      throw new HttpError(400, 'Invalid instructor');
+    }
 
-  // Ensure all arrays are properly initialized
-  const courseData = {
-    ...data,
-    studentIds: data.studentIds || [],
-    tags: data.tags || [],
-  };
+    const category = await this.categoryRepo.findById(data.categoryId);
+    if (!category) throw new HttpError(400, 'Invalid category');
 
-  const course = await this.courseRepo.create(courseData);
-  await this.activityLogRepo.log(data.instructorId, 'create_course', 'course', course.id);
-  return this.mapToDTO(course);
-}
+    const courseData = {
+      ...data,
+      studentIds: data.studentIds || [],
+      tags: data.tags || [],
+    };
+
+    const course = await this.courseRepo.create(courseData);
+    await this.activityLogRepo.log(data.instructorId, 'create_course', 'course', course.id);
+    return this.mapToDTO(course);
+  }
 
   async getCourseById(id: string): Promise<CourseDTO> {
     const cacheKey = `course:${id}`;
@@ -1734,6 +1787,13 @@ async createCourse(data: Omit<Course, keyof BaseEntity>): Promise<CourseDTO> {
   }
 
   async updateCourse(id: string, data: Partial<Course>): Promise<CourseDTO> {
+    if (data.thumbnailUrl) {
+      const existingCourse = await this.courseRepo.findById(id);
+      if (existingCourse && existingCourse.thumbnailUrl) {
+        await this.storageService.deleteFile(existingCourse.thumbnailUrl);
+      }
+    }
+
     if (data.instructorId) {
       const instructor = await this.userRepo.findById(data.instructorId);
       if (!instructor || instructor.role !== Role.INSTRUCTOR) {
@@ -1756,10 +1816,16 @@ async createCourse(data: Omit<Course, keyof BaseEntity>): Promise<CourseDTO> {
   }
 
   async softDeleteCourse(id: string): Promise<boolean> {
+    const course = await this.courseRepo.findById(id);
+    if (!course) throw new HttpError(404, 'Course not found');
+
+    if (course.thumbnailUrl) {
+      await this.storageService.deleteFile(course.thumbnailUrl);
+    }
+
     const result = await this.courseRepo.softDelete(id);
     if (!result) throw new HttpError(404, 'Course not found');
 
-    // Soft delete lessons
     const lessons = await this.lessonRepo.findMany({ courseId: id });
     await Promise.all(lessons.data.map(lesson => this.lessonRepo.softDelete(lesson.id)));
 
@@ -1773,7 +1839,6 @@ async createCourse(data: Omit<Course, keyof BaseEntity>): Promise<CourseDTO> {
     const result = await this.courseRepo.restore(id);
     if (!result) throw new HttpError(404, 'Course not found');
 
-    // Restore lessons
     const lessons = await this.lessonRepo.findMany({ courseId: id }, true);
     await Promise.all(lessons.data.map(lesson => this.lessonRepo.restore(lesson.id)));
 
@@ -2188,7 +2253,8 @@ class ReportService {
     private userRepo: UserRepository,
     private enrollmentRepo: EnrollmentRepository,
     private conversationRepo: SupportConversationRepository,
-    private lessonRepo: LessonRepository
+    private lessonRepo: LessonRepository,
+    private storageService: FirebaseStorageService
   ) {}
 
   async generateUserReport(userId: string): Promise<UserReport> {
@@ -2257,57 +2323,63 @@ class ReportService {
   }
 
   async exportReport(report: UserReport, format: ExportFormat): Promise<string> {
-  const fileName = `user-report-${report.user.id}-${Date.now()}.${format}`;
-  const filePath = path.join(DATA_DIR, fileName);
+    const fileName = `user-report-${report.user.id}-${Date.now()}.${format}`;
+    const tempFilePath = path.join(DATA_DIR, fileName);
 
-  if (format === ExportFormat.CSV) {
-    const csvWriter = csv.createObjectCsvWriter({
-      path: filePath,
-      header: [
-        { id: 'id', title: 'ID' },
-        { id: 'name', title: 'Name' },
-        { id: 'email', title: 'Email' },
-        { id: 'totalCourses', title: 'Total Courses' },
-        { id: 'completedCourses', title: 'Completed Courses' },
-        { id: 'totalLessons', title: 'Total Lessons' },
-        { id: 'completedLessons', title: 'Completed Lessons' }
-      ]
-    });
+    if (format === ExportFormat.CSV) {
+      const csvWriter = csv.createObjectCsvWriter({
+        path: tempFilePath,
+        header: [
+          { id: 'id', title: 'ID' },
+          { id: 'name', title: 'Name' },
+          { id: 'email', title: 'Email' },
+          { id: 'totalCourses', title: 'Total Courses' },
+          { id: 'completedCourses', title: 'Completed Courses' },
+          { id: 'totalLessons', title: 'Total Lessons' },
+          { id: 'completedLessons', title: 'Completed Lessons' }
+        ]
+      });
 
-    await csvWriter.writeRecords([{
-      id: report.user.id,
-      name: report.user.name,
-      email: report.user.email,
-      totalCourses: report.progress.totalCourses,
-      completedCourses: report.progress.completedCourses,
-      totalLessons: report.progress.totalLessons,
-      completedLessons: report.progress.completedLessons
-    }]);
-  } else if (format === ExportFormat.PDF) {
-    await new Promise<void>((resolve, reject) => {
-      const doc = new PDFDocument();
-      const stream = fs.createWriteStream(filePath);
-      doc.pipe(stream);
+      await csvWriter.writeRecords([{
+        id: report.user.id,
+        name: report.user.name,
+        email: report.user.email,
+        totalCourses: report.progress.totalCourses,
+        completedCourses: report.progress.completedCourses,
+        totalLessons: report.progress.totalLessons,
+        completedLessons: report.progress.completedLessons
+      }]);
+    } else if (format === ExportFormat.PDF) {
+      await new Promise<void>((resolve, reject) => {
+        const doc = new PDFDocument();
+        const stream = fs.createWriteStream(tempFilePath);
+        doc.pipe(stream);
 
-      doc.fontSize(20).text('User Report', { align: 'center' });
-      doc.moveDown();
+        doc.fontSize(20).text('User Report', { align: 'center' });
+        doc.moveDown();
 
-      doc.fontSize(14).text(`Name: ${report.user.name}`);
-      doc.text(`Email: ${report.user.email}`);
-      doc.text(`Total Courses: ${report.progress.totalCourses}`);
-      doc.text(`Completed Courses: ${report.progress.completedCourses}`);
-      doc.text(`Total Lessons: ${report.progress.totalLessons}`);
-      doc.text(`Completed Lessons: ${report.progress.completedLessons}`);
+        doc.fontSize(14).text(`Name: ${report.user.name}`);
+        doc.text(`Email: ${report.user.email}`);
+        doc.text(`Total Courses: ${report.progress.totalCourses}`);
+        doc.text(`Completed Courses: ${report.progress.completedCourses}`);
+        doc.text(`Total Lessons: ${report.progress.totalLessons}`);
+        doc.text(`Completed Lessons: ${report.progress.completedLessons}`);
 
-      doc.end();
+        doc.end();
 
-      stream.on('finish', () => resolve());
-      stream.on('error', reject);
-    });
+        stream.on('finish', () => resolve());
+        stream.on('error', reject);
+      });
+    }
+
+    // Upload to Firebase Storage
+    const fileUrl = await this.storageService.uploadFromPath(tempFilePath, 'reports');
+    
+    // Clean up temporary file
+    fs.unlinkSync(tempFilePath);
+    
+    return fileUrl;
   }
-
-  return filePath;
-}
 }
 
 class AdminService {
@@ -2806,7 +2878,8 @@ class ExamService {
     private userRepo: UserRepository,
     private courseRepo: CourseRepository,
     private cacheService: CacheService,
-    private activityLogRepo: ActivityLogRepository
+    private activityLogRepo: ActivityLogRepository,
+    private storageService: FirebaseStorageService
   ) {}
 
   async createExam(data: Omit<Exam, keyof BaseEntity>): Promise<Exam> {
@@ -2946,9 +3019,82 @@ class ExamService {
   }
 
   private async generateCertificate(userId: string, courseId: string, grade: string): Promise<string> {
-    // In a real implementation, this would generate a PDF certificate
-    // For now, we'll return a placeholder URL
-    return `/certificates/${userId}-${courseId}-${Date.now()}.pdf`;
+    // Generate PDF certificate in memory
+    const pdfBuffer = await new Promise<Buffer>((resolve, reject) => {
+      const doc = new PDFDocument({
+        size: 'landscape',
+        layout: 'landscape',
+        margins: {
+          top: 50,
+          bottom: 50,
+          left: 72,
+          right: 72
+        }
+      });
+      
+      const chunks: any[] = [];
+      
+      doc.on('data', (chunk) => chunks.push(chunk));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+
+      // Add background
+      doc.rect(0, 0, doc.page.width, doc.page.height).fill('#f8f9fa');
+      
+      // Add border
+      doc.strokeColor('#007bff').lineWidth(20);
+      doc.rect(10, 10, doc.page.width - 20, doc.page.height - 20).stroke();
+      
+      // Add title
+      doc.fontSize(36).fillColor('#343a40').text('CERTIFICATE OF COMPLETION', {
+        align: 'center',
+        y: 150
+      });
+      
+      // Add user info
+      doc.fontSize(24).fillColor('#6c757d').text(`This certifies that`, {
+        align: 'center',
+        y: 250
+      });
+      
+      doc.fontSize(32).fillColor('#007bff').text(userId, {
+        align: 'center',
+        y: 300
+      });
+      
+      doc.fontSize(24).fillColor('#6c757d').text(`has successfully completed the course`, {
+        align: 'center',
+        y: 350
+      });
+      
+      doc.fontSize(28).fillColor('#343a40').text(courseId, {
+        align: 'center',
+        y: 400
+      });
+      
+      doc.fontSize(20).fillColor('#6c757d').text(`with a grade of ${grade}`, {
+        align: 'center',
+        y: 450
+      });
+      
+      // Add date
+      doc.fontSize(16).fillColor('#6c757d').text(`Issued on: ${dayjs().format('MMMM D, YYYY')}`, {
+        align: 'center',
+        y: 520
+      });
+      
+      // Add verification info
+      doc.fontSize(12).fillColor('#adb5bd').text(`Verification Code: ${uuidv4()}`, {
+        align: 'center',
+        y: 570
+      });
+
+      doc.end();
+    });
+
+    // Upload to Firebase Storage
+    const fileName = `certificate-${userId}-${courseId}-${Date.now()}.pdf`;
+    return await this.storageService.uploadFile(pdfBuffer, fileName, 'certificates');
   }
 
   async getCertificatesByUser(userId: string): Promise<CertificateDTO[]> {
@@ -3735,36 +3881,34 @@ class RequestIdMiddleware {
 
 class UploadMiddleware {
   static setup() {
-    const storage = process.env.VERCEL ? 
-  multer.memoryStorage() :
-  multer.diskStorage({
-    destination: (req, file, cb) => {
-      cb(null, UPLOAD_DIR);
-    },
-    filename: (req, file, cb) => {
-      const ext = path.extname(file.originalname);
-      cb(null, `${uuidv4()}${ext}`);
-    },
-  });
+    const storage = multer.memoryStorage(); // Use memory storage for serverless environments
 
     const fileFilter = (req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
-      const imageMimes = ['image/jpeg', 'image/png', 'image/webp'];
-      const docMimes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/zip'];
+      const imageMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+      const videoMimes = ['video/mp4', 'video/quicktime', 'video/x-msvideo'];
+      const docMimes = [
+        'application/pdf', 
+        'application/msword', 
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 
+        'application/zip'
+      ];
 
       if (file.fieldname === 'profile' || file.fieldname === 'thumbnail') {
         if (imageMimes.includes(file.mimetype)) return cb(null, true);
+      } else if (file.fieldname === 'video') {
+        if (videoMimes.includes(file.mimetype)) return cb(null, true);
       } else if (file.fieldname === 'attachment') {
         if (docMimes.includes(file.mimetype)) return cb(null, true);
       }
 
-      cb(new Error('Invalid file type'));
+      cb(new Error(`Invalid file type: ${file.mimetype}`));
     };
 
     return multer({
       storage,
       fileFilter,
       limits: {
-        fileSize: 20 * 1024 * 1024, // 20MB
+        fileSize: 50 * 1024 * 1024, // 50MB
       },
     });
   }
@@ -3901,13 +4045,35 @@ const recommendationRepo = new RecommendationRepository();
 // Services
 const cacheService = new CacheService(redisClient);
 const authService = new AuthService(userRepo, refreshTokenRepo, cacheService, activityLogRepo);
-const userService = new UserService(userRepo, enrollmentRepo, conversationRepo, cacheService, activityLogRepo);
-const courseService = new CourseService(courseRepo, lessonRepo, categoryRepo, cacheService, activityLogRepo, userRepo);
+const userService = new UserService(
+  userRepo,
+  enrollmentRepo,
+  conversationRepo,
+  cacheService,
+  activityLogRepo,
+  firebaseStorageService
+);
+const courseService = new CourseService(
+  courseRepo,
+  lessonRepo,
+  categoryRepo,
+  cacheService,
+  activityLogRepo,
+  userRepo,
+  firebaseStorageService
+);
+
 const lessonService = new LessonService(lessonRepo, courseRepo, cacheService, activityLogRepo, userRepo);
 const categoryService = new CategoryService(categoryRepo, cacheService, activityLogRepo);
 const enrollmentService = new EnrollmentService(enrollmentRepo, userRepo, courseRepo, cacheService, activityLogRepo);
 const supportService = new SupportService(conversationRepo, userRepo, cacheService, activityLogRepo);
-const reportService = new ReportService(userRepo, enrollmentRepo, conversationRepo, lessonRepo);
+const reportService = new ReportService(
+  userRepo, 
+  enrollmentRepo, 
+  conversationRepo, 
+  lessonRepo,
+  firebaseStorageService
+);
 const adminService = new AdminService(
   userRepo, courseRepo, lessonRepo, categoryRepo, 
   enrollmentRepo, conversationRepo, supportService
@@ -3928,7 +4094,8 @@ const examService = new ExamService(
   userRepo,
   courseRepo,
   cacheService,
-  activityLogRepo
+  activityLogRepo,
+  firebaseStorageService
 );
 
 // تهيئة services الجديدة
@@ -4711,6 +4878,7 @@ apiRouter.post('/:collection/:id/restore', AuthMiddleware.authenticate(), RBACMi
 apiRouter.delete('/:collection/:id/permanent', AuthMiddleware.authenticate(), RBACMiddleware.checkRole([Role.ADMIN]), BinController.permanentDelete);
 
 // أضف هذا بعد تعريف الـ UploadMiddleware
+// Upload route
 apiRouter.post('/upload',
   AuthMiddleware.authenticate(),
   UploadMiddleware.setup().single('file'),
@@ -4719,17 +4887,52 @@ apiRouter.post('/upload',
       if (!req.file) {
         throw new HttpError(400, 'No file uploaded');
       }
-
-      // Handle memory storage
-      if (process.env.VERCEL) {
-        // For Vercel, you might want to upload to cloud storage instead
-        const fileUrl = await uploadToCloudStorage(req.file.buffer, req.file.originalname);
-        res.json({ success: true, data: { url: fileUrl } });
-      } else {
-        // For local storage
-        const fileUrl = `/uploads/${req.file.filename}`;
-        res.json({ success: true, data: { url: fileUrl } });
+      
+      // Determine destination path based on file type
+      let destinationPath = 'uploads';
+      if (req.file.fieldname === 'profile') {
+        destinationPath = 'profiles';
+      } else if (req.file.fieldname === 'thumbnail') {
+        destinationPath = 'thumbnails';
+      } else if (req.file.fieldname === 'video') {
+        destinationPath = 'videos';
+      } else if (req.file.fieldname === 'attachment') {
+        destinationPath = 'attachments';
       }
+      
+      // Upload to Firebase Storage
+      const fileUrl = await firebaseStorageService.uploadFile(
+        req.file.buffer, 
+        req.file.originalname,
+        destinationPath
+      );
+      
+      res.json({
+        success: true,
+        data: { url: fileUrl }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// Delete file route
+apiRouter.delete('/files',
+  AuthMiddleware.authenticate(),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { fileUrl } = req.body;
+      if (!fileUrl) {
+        throw new HttpError(400, 'File URL is required');
+      }
+      
+      const result = await firebaseStorageService.deleteFile(fileUrl);
+      
+      res.json({
+        success: result,
+        data: { message: result ? 'File deleted successfully' : 'Failed to delete file' }
+      });
     } catch (error) {
       next(error);
     }
