@@ -205,13 +205,14 @@ const LOG_DIR = '/tmp/';
 
 
 // Patch mkdirSync
+// Patch mkdirSync
 const origMkdirSync = fs.mkdirSync;
-fs.mkdirSync = function (p: fs.PathLike, options?: any) {
-  if (typeof p === "string" && p.includes("/var/task/src/uploads")) {
-    console.warn("⚠️ Blocked attempt to mkdir in forbidden path:", p);
-    return p; // تجاهل الإنشاء
+fs.mkdirSync = function (path: fs.PathLike, options?: fs.MakeDirectoryOptions & { recursive?: boolean }) {
+  if (typeof path === "string" && path.includes("/var/task/src/uploads")) {
+    console.warn("⚠️ Blocked attempt to mkdir in forbidden path:", path);
+    return path; // تجاهل الإنشاء
   }
-  return origMkdirSync.call(fs, p, options);
+  return origMkdirSync.call(fs, path, options);
 };
 
 // Patch writeFileSync
