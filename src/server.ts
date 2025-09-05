@@ -131,8 +131,13 @@ const PORT = parseInt(process.env.PORT || '4000');
 const JWT_SECRET = process.env.JWT_SECRET || 'secret';
 const JWT_ACCESS_EXPIRY = process.env.JWT_ACCESS_EXPIRY || '15m';
 const JWT_REFRESH_EXPIRY = process.env.JWT_REFRESH_EXPIRY || '7d';
-const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, 'uploads');
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
+const UPLOAD_DIR = process.env.VERCEL ? 
+  '/tmp/uploads' : 
+  process.env.UPLOAD_DIR || path.join(__dirname, 'uploads');
+
+const DATA_DIR = process.env.VERCEL ? 
+  '/tmp/data' : 
+  process.env.DATA_DIR || path.join(__dirname, 'data');
 
 // Create directories if not exists
 [UPLOAD_DIR, DATA_DIR, path.join(__dirname, 'logs')].forEach(dir => {
@@ -140,17 +145,21 @@ const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 });
 
 // Logger setup
+const loggerTransports = process.env.VERCEL ? 
+  [new winston.transports.Console()] :
+  [
+    new winston.transports.Console(),
+    new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
+    new winston.transports.File({ filename: 'logs/combined.log' }),
+  ];
+
 const logger = winston.createLogger({
   level: 'info',
   format: winston.format.combine(
     winston.format.timestamp(),
     winston.format.json()
   ),
-  transports: [
-    new winston.transports.Console(),
-    new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
-    new winston.transports.File({ filename: 'logs/combined.log' }),
-  ],
+  transports: loggerTransports,
 });
 
 // Custom error class
@@ -3726,15 +3735,17 @@ class RequestIdMiddleware {
 
 class UploadMiddleware {
   static setup() {
-    const storage = multer.diskStorage({
-      destination: (req: Request, file: Express.Multer["File"], cb: (error: Error | null, destination: string) => void) => {
-        cb(null, UPLOAD_DIR);
-      },
-      filename: (req: Request, file: Express.Multer.File, cb: (error: Error | null, filename: string) => void) => {
-        const ext = path.extname(file.originalname);
-        cb(null, `${uuidv4()}${ext}`);
-      },
-    });
+    const storage = process.env.VERCEL ? 
+  multer.memoryStorage() :
+  multer.diskStorage({
+    destination: (req, file, cb) => {
+      cb(null, UPLOAD_DIR);
+    },
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname);
+      cb(null, `${uuidv4()}${ext}`);
+    },
+  });
 
     const fileFilter = (req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
       const imageMimes = ['image/jpeg', 'image/png', 'image/webp'];
@@ -4703,17 +4714,22 @@ apiRouter.delete('/:collection/:id/permanent', AuthMiddleware.authenticate(), RB
 apiRouter.post('/upload',
   AuthMiddleware.authenticate(),
   UploadMiddleware.setup().single('file'),
-  async (req: Request, res: Response , next: NextFunction) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.file) {
         throw new HttpError(400, 'No file uploaded');
       }
-      
-      const fileUrl = `/uploads/${req.file.filename}`;
-      res.json({
-        success: true,
-        data: { url: fileUrl }
-      });
+
+      // Handle memory storage
+      if (process.env.VERCEL) {
+        // For Vercel, you might want to upload to cloud storage instead
+        const fileUrl = await uploadToCloudStorage(req.file.buffer, req.file.originalname);
+        res.json({ success: true, data: { url: fileUrl } });
+      } else {
+        // For local storage
+        const fileUrl = `/uploads/${req.file.filename}`;
+        res.json({ success: true, data: { url: fileUrl } });
+      }
     } catch (error) {
       next(error);
     }
