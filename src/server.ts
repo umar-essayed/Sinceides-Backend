@@ -203,6 +203,27 @@ const UPLOAD_DIR = '/tmp/';
 const DATA_DIR = '/tmp/';
 const LOG_DIR = '/tmp/';
 
+
+// Patch mkdirSync
+const origMkdirSync = fs.mkdirSync;
+fs.mkdirSync = function (p: fs.PathLike, options?: any) {
+  if (typeof p === "string" && p.includes("/var/task/src/uploads")) {
+    console.warn("⚠️ Blocked attempt to mkdir in forbidden path:", p);
+    return p; // تجاهل الإنشاء
+  }
+  return origMkdirSync.call(fs, p, options);
+};
+
+// Patch writeFileSync
+const origWriteFileSync = fs.writeFileSync;
+fs.writeFileSync = function (p: fs.PathLike, data: any, options?: any) {
+  if (typeof p === "string" && p.includes("/var/task/src/uploads")) {
+    console.warn("⚠️ Blocked attempt to write in forbidden path:", p);
+    return; // تجاهل الكتابة
+  }
+  return origWriteFileSync.call(fs, p, data, options);
+};
+
 // Logger setup
 const transports: winston.transport[] = [
   new winston.transports.Console()
