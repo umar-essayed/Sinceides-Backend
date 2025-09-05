@@ -19,7 +19,7 @@ import winston from 'winston';
 import morgan from 'morgan';
 import { v4 as uuidv4 } from 'uuid';
 import dayjs from 'dayjs';
-import Redis from 'ioredis';
+import { Redis } from '@upstash/redis'
 import fs, { PathLike, MakeDirectoryOptions, WriteFileOptions, PathOrFileDescriptor } from "fs";
 import 'express-async-errors';
 import swaggerUi from 'swagger-ui-express';
@@ -183,14 +183,22 @@ const firestorePrefix = process.env.FIRESTORE_PREFIX || 'prod';
 // Redis setup
 
 
-// تهيئة Redis مباشرة باستخدام بيانات Upstash
 const redisClient = new Redis({
-  host: "premium-lobster-46946.upstash.io",
-  port: 6379,
-  password: "AbdiAAIncDE1MDE3MjRiNTRiYzQ0ZWUyOGY0Y2RkMjJkZjRmMDQyN3AxNDY5NDY",
-  db: 0,
-  tls: {}, // ضروري للاتصال بـ Upstash عبر SSL
+  url: "https://premium-lobster-46946.upstash.io",
+  token: "AbdiAAIncDE1MDE3MjRiNTRiYzQ0ZWUyOGY0Y2RkMjJkZjRmMDQyN3AxNDY5NDY",
 });
+
+export default async function handler(req, res) {
+  try {
+    await redisClient.set('hello', 'world');
+    const value = await redisClient.get('hello');
+
+    res.status(200).json({ value });
+  } catch (err) {
+    console.error('Redis error:', err);
+    res.status(500).json({ error: 'Redis error' });
+  }
+}
 
 // مدة صلاحية القيم
 const REDIS_TTL_SINGLE = 300; // 5 دقائق
