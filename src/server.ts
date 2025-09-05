@@ -103,6 +103,68 @@ try {
 
 // باقي الكود...
 // Initialize Firebase Storage
+class FirebaseStorageService {
+  constructor(private bucket: admin.storage.Bucket) {}
+
+  async uploadFile(buffer: Buffer, fileName: string, destinationPath: string = 'uploads'): Promise<string> {
+    const filePath = `${destinationPath}/${Date.now()}_${fileName}`;
+    const file = this.bucket.file(filePath);
+    
+    await file.save(buffer, {
+      metadata: {
+        contentType: this.getContentType(fileName),
+      },
+    });
+
+    // Make the file publicly accessible
+    await file.makePublic();
+
+    // Return the public URL
+    return `https://storage.googleapis.com/${this.bucket.name}/${filePath}`;
+  }
+
+  async deleteFile(fileUrl: string): Promise<boolean> {
+    try {
+      // Extract file path from URL
+      const urlParts = fileUrl.split('/');
+      const filePath = urlParts.slice(4).join('/'); // Remove the https://storage.googleapis.com/bucket-name/ part
+      
+      const file = this.bucket.file(filePath);
+      await file.delete();
+      return true;
+    } catch (error) {
+      logger.error('Error deleting file from Firebase Storage:', error);
+      return false;
+    }
+  }
+
+  async uploadFromPath(filePath: string, destinationPath: string = 'uploads'): Promise<string> {
+    const fileName = path.basename(filePath);
+    const fileBuffer = fs.readFileSync(filePath);
+    return this.uploadFile(fileBuffer, fileName, destinationPath);
+  }
+
+  private getContentType(fileName: string): string {
+    const extension = fileName.split('.').pop()?.toLowerCase();
+    const contentTypes: { [key: string]: string } = {
+      'jpg': 'image/jpeg',
+      'jpeg': 'image/jpeg',
+      'png': 'image/png',
+      'gif': 'image/gif',
+      'webp': 'image/webp',
+      'pdf': 'application/pdf',
+      'doc': 'application/msword',
+      'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'zip': 'application/zip',
+      'mp4': 'video/mp4',
+      'mov': 'video/quicktime',
+      'avi': 'video/x-msvideo',
+    };
+    
+    return contentTypes[extension || ''] || 'application/octet-stream';
+  }
+}
+
 const bucket = admin.storage().bucket();
 const firebaseStorageService = new FirebaseStorageService(bucket);
 
@@ -1386,67 +1448,7 @@ async get<T>(key: string): Promise<T | null> {
 // Services
 
 // Firebase Storage Service
-class FirebaseStorageService {
-  constructor(private bucket: admin.storage.Bucket) {}
 
-  async uploadFile(buffer: Buffer, fileName: string, destinationPath: string = 'uploads'): Promise<string> {
-    const filePath = `${destinationPath}/${Date.now()}_${fileName}`;
-    const file = this.bucket.file(filePath);
-    
-    await file.save(buffer, {
-      metadata: {
-        contentType: this.getContentType(fileName),
-      },
-    });
-
-    // Make the file publicly accessible
-    await file.makePublic();
-
-    // Return the public URL
-    return `https://storage.googleapis.com/${this.bucket.name}/${filePath}`;
-  }
-
-  async deleteFile(fileUrl: string): Promise<boolean> {
-    try {
-      // Extract file path from URL
-      const urlParts = fileUrl.split('/');
-      const filePath = urlParts.slice(4).join('/'); // Remove the https://storage.googleapis.com/bucket-name/ part
-      
-      const file = this.bucket.file(filePath);
-      await file.delete();
-      return true;
-    } catch (error) {
-      logger.error('Error deleting file from Firebase Storage:', error);
-      return false;
-    }
-  }
-
-  async uploadFromPath(filePath: string, destinationPath: string = 'uploads'): Promise<string> {
-    const fileName = path.basename(filePath);
-    const fileBuffer = fs.readFileSync(filePath);
-    return this.uploadFile(fileBuffer, fileName, destinationPath);
-  }
-
-  private getContentType(fileName: string): string {
-    const extension = fileName.split('.').pop()?.toLowerCase();
-    const contentTypes: { [key: string]: string } = {
-      'jpg': 'image/jpeg',
-      'jpeg': 'image/jpeg',
-      'png': 'image/png',
-      'gif': 'image/gif',
-      'webp': 'image/webp',
-      'pdf': 'application/pdf',
-      'doc': 'application/msword',
-      'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'zip': 'application/zip',
-      'mp4': 'video/mp4',
-      'mov': 'video/quicktime',
-      'avi': 'video/x-msvideo',
-    };
-    
-    return contentTypes[extension || ''] || 'application/octet-stream';
-  }
-}
 
 class AuthService {
   constructor(
@@ -3019,83 +3021,82 @@ class ExamService {
   }
 
   private async generateCertificate(userId: string, courseId: string, grade: string): Promise<string> {
-    // Generate PDF certificate in memory
-    const pdfBuffer = await new Promise<Buffer>((resolve, reject) => {
-      const doc = new PDFDocument({
-        size: 'landscape',
-        layout: 'landscape',
-        margins: {
-          top: 50,
-          bottom: 50,
-          left: 72,
-          right: 72
-        }
-      });
-      
-      const chunks: any[] = [];
-      
-      doc.on('data', (chunk) => chunks.push(chunk));
-      doc.on('end', () => resolve(Buffer.concat(chunks)));
-      doc.on('error', reject);
+  const pdfBuffer = await new Promise<Buffer>((resolve, reject) => {
+    const doc = new PDFDocument({
+      size: 'landscape',
+      layout: 'landscape',
+      margins: {
+        top: 50,
+        bottom: 50,
+        left: 72,
+        right: 72
+      }
+    });
+    
+    const chunks: any[] = [];
+    
+    doc.on('data', (chunk) => chunks.push(chunk));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
 
-      // Add background
-      doc.rect(0, 0, doc.page.width, doc.page.height).fill('#f8f9fa');
-      
-      // Add border
-      doc.strokeColor('#007bff').lineWidth(20);
-      doc.rect(10, 10, doc.page.width - 20, doc.page.height - 20).stroke();
-      
-      // Add title
-      doc.fontSize(36).fillColor('#343a40').text('CERTIFICATE OF COMPLETION', {
-        align: 'center',
-        y: 150
-      });
-      
-      // Add user info
-      doc.fontSize(24).fillColor('#6c757d').text(`This certifies that`, {
-        align: 'center',
-        y: 250
-      });
-      
-      doc.fontSize(32).fillColor('#007bff').text(userId, {
-        align: 'center',
-        y: 300
-      });
-      
-      doc.fontSize(24).fillColor('#6c757d').text(`has successfully completed the course`, {
-        align: 'center',
-        y: 350
-      });
-      
-      doc.fontSize(28).fillColor('#343a40').text(courseId, {
-        align: 'center',
-        y: 400
-      });
-      
-      doc.fontSize(20).fillColor('#6c757d').text(`with a grade of ${grade}`, {
-        align: 'center',
-        y: 450
-      });
-      
-      // Add date
-      doc.fontSize(16).fillColor('#6c757d').text(`Issued on: ${dayjs().format('MMMM D, YYYY')}`, {
-        align: 'center',
-        y: 520
-      });
-      
-      // Add verification info
-      doc.fontSize(12).fillColor('#adb5bd').text(`Verification Code: ${uuidv4()}`, {
-        align: 'center',
-        y: 570
-      });
-
-      doc.end();
+    // Add background
+    doc.rect(0, 0, doc.page.width, doc.page.height).fill('#f8f9fa');
+    
+    // Add border
+    doc.strokeColor('#007bff').lineWidth(20);
+    doc.rect(10, 10, doc.page.width - 20, doc.page.height - 20).stroke();
+    
+    // Add title - FIXED: Set y position first, then text
+    doc.y = 150;
+    doc.fontSize(36).fillColor('#343a40').text('CERTIFICATE OF COMPLETION', {
+      align: 'center'
+    });
+    
+    // Add user info - FIXED: Use moveDown instead of y positioning
+    doc.moveDown(2);
+    doc.fontSize(24).fillColor('#6c757d').text(`This certifies that`, {
+      align: 'center'
+    });
+    
+    doc.moveDown();
+    doc.fontSize(32).fillColor('#007bff').text(userId, {
+      align: 'center'
+    });
+    
+    doc.moveDown();
+    doc.fontSize(24).fillColor('#6c757d').text(`has successfully completed the course`, {
+      align: 'center'
+    });
+    
+    doc.moveDown();
+    doc.fontSize(28).fillColor('#343a40').text(courseId, {
+      align: 'center'
+    });
+    
+    doc.moveDown();
+    doc.fontSize(20).fillColor('#6c757d').text(`with a grade of ${grade}`, {
+      align: 'center'
+    });
+    
+    // Add date
+    doc.moveDown(2);
+    doc.fontSize(16).fillColor('#6c757d').text(`Issued on: ${dayjs().format('MMMM D, YYYY')}`, {
+      align: 'center'
+    });
+    
+    // Add verification info
+    doc.moveDown();
+    doc.fontSize(12).fillColor('#adb5bd').text(`Verification Code: ${uuidv4()}`, {
+      align: 'center'
     });
 
-    // Upload to Firebase Storage
-    const fileName = `certificate-${userId}-${courseId}-${Date.now()}.pdf`;
-    return await this.storageService.uploadFile(pdfBuffer, fileName, 'certificates');
-  }
+    doc.end();
+  });
+
+  // Upload to Firebase Storage
+  const fileName = `certificate-${userId}-${courseId}-${Date.now()}.pdf`;
+  return await this.storageService.uploadFile(pdfBuffer, fileName, 'certificates');
+}
 
   async getCertificatesByUser(userId: string): Promise<CertificateDTO[]> {
     const certificates = await this.certificateRepo.findByUser(userId);
