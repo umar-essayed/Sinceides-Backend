@@ -35,7 +35,8 @@
     "swagger-ui-express": "^5.0.0",
     "uuid": "^9.0.1",
     "winston": "^3.11.0",
-    "zod": "^3.22.4"
+    "zod": "^3.22.4",
+    "@google-cloud/storage": "^7.0.0"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",

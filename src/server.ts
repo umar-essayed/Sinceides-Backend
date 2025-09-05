@@ -1,6 +1,7 @@
 import express from 'express';
 import { Request, Response, NextFunction, Router } from 'express';
-import admin from 'firebase-admin';
+import * as admin from 'firebase-admin';
+import { Bucket } from '@google-cloud/storage'; // أضف هذا الاستيراد
 import path from "path";
 import bcrypt from 'bcryptjs';
 import passport from 'passport';
@@ -104,7 +105,7 @@ try {
 // باقي الكود...
 // Initialize Firebase Storage
 class FirebaseStorageService {
-  constructor(private bucket: admin.storage.Bucket) {}
+  constructor(private bucket: Bucket) {}
 
   async uploadFile(buffer: Buffer, fileName: string, destinationPath: string = 'uploads'): Promise<string> {
     const filePath = `${destinationPath}/${Date.now()}_${fileName}`;
@@ -165,7 +166,8 @@ class FirebaseStorageService {
   }
 }
 
-const bucket = admin.storage().bucket();
+
+const bucket = admin.storage().bucket() as unknown as Bucket;
 const firebaseStorageService = new FirebaseStorageService(bucket);
 
 
