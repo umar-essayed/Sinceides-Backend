@@ -19,7 +19,7 @@ import morgan from 'morgan';
 import { v4 as uuidv4 } from 'uuid';
 import dayjs from 'dayjs';
 import Redis from 'ioredis';
-import fs from 'fs';
+import fs, { PathLike, MakeDirectoryOptions, WriteFileOptions, PathOrFileDescriptor } from "fs";
 import 'express-async-errors';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsdoc from 'swagger-jsdoc';
@@ -206,24 +206,34 @@ const LOG_DIR = '/tmp/';
 
 
 // Patch mkdirSync safely
-const origMkdirSync = fs.mkdirSync.bind(fs);
-(fs as any).mkdirSync = function (p: any, options?: any) {
-  if (typeof p === "string" && p.includes("/var/task/src/uploads")) {
-    console.warn("⚠️ Blocked attempt to mkdir in forbidden path:", p);
-    return p;
-  }
-  return origMkdirSync(p, options);
-};
 
-// Patch writeFileSync safely
-const origWriteFileSync = fs.writeFileSync.bind(fs);
-(fs as any).writeFileSync = function (p: any, data: any, options?: any) {
-  if (typeof p === "string" && p.includes("/var/task/src/uploads")) {
-    console.warn("⚠️ Blocked attempt to write in forbidden path:", p);
+
+// ---- Patch mkdirSync ----
+const origMkdirSync: typeof fs.mkdirSync = fs.mkdirSync.bind(fs);
+fs.mkdirSync = function (
+  path: PathLike,
+  options?: MakeDirectoryOptions & { recursive?: boolean }
+): string | undefined {
+  if (typeof path === "string" && path.includes("/var/task/src/uploads")) {
+    console.warn("⚠️ Blocked attempt to mkdir in forbidden path:", path);
+    return path;
+  }
+  return origMkdirSync(path, options as any);
+} as typeof fs.mkdirSync;
+
+// ---- Patch writeFileSync ----
+const origWriteFileSync: typeof fs.writeFileSync = fs.writeFileSync.bind(fs);
+fs.writeFileSync = function (
+  file: PathOrFileDescriptor,
+  data: string | NodeJS.ArrayBufferView,
+  options?: WriteFileOptions
+): void {
+  if (typeof file === "string" && file.includes("/var/task/src/uploads")) {
+    console.warn("⚠️ Blocked attempt to write in forbidden path:", file);
     return;
   }
-  return origWriteFileSync(p, data, options);
-};
+  return origWriteFileSync(file, data, options);
+} as typeof fs.writeFileSync;
 
 // Logger setup
 const transports: winston.transport[] = [
