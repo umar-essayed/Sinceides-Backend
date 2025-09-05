@@ -4472,7 +4472,10 @@ app.use(
     skip: (req: Request) => req.ip === '127.0.0.1',
     message: 'Too many auth attempts, please try again later',
     skipFailedRequests: true,
-    keyGenerator: (req: Request) => ipKeyGenerator(req.ip || 'unknown-ip') + req.path,
+    keyGenerator: (req: Request) => {
+      const ip = req.ip || req.connection.remoteAddress || 'unknown-ip';
+      return `${ip}-${req.path}`;
+    },
   })
 );
 
@@ -4758,7 +4761,7 @@ const paginateResults = (results: any[], limit: number, cursor?: string) => {
     nextCursor: endIndex < results.length ? paginatedResults[paginatedResults.length - 1].id : null
   };
 };
-keyGenerator: (req: Request) => req.ip || 'unknown-ip'
+
 // CLI commands
 async function handleCliCommands() {
   if (process.argv.includes('--seed-only')) {
