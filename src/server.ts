@@ -167,7 +167,7 @@ class FirebaseStorageService {
 }
 
 
-const bucket = admin.storage().bucket() as unknown as Bucket;
+const bucket = admin.storage().bucket(`${serviceAccount.project_id}.appspot.com`);
 const firebaseStorageService = new FirebaseStorageService(bucket);
 
 
