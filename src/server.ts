@@ -204,25 +204,25 @@ const DATA_DIR = '/tmp/';
 const LOG_DIR = '/tmp/';
 
 
-// Patch mkdirSync
-// Patch mkdirSync
-const origMkdirSync = fs.mkdirSync;
-fs.mkdirSync = function (path: fs.PathLike, options?: fs.MakeDirectoryOptions & { recursive?: boolean }) {
-  if (typeof path === "string" && path.includes("/var/task/src/uploads")) {
-    console.warn("⚠️ Blocked attempt to mkdir in forbidden path:", path);
-    return path; // تجاهل الإنشاء
+
+// Patch mkdirSync safely
+const origMkdirSync = fs.mkdirSync.bind(fs);
+(fs as any).mkdirSync = function (p: any, options?: any) {
+  if (typeof p === "string" && p.includes("/var/task/src/uploads")) {
+    console.warn("⚠️ Blocked attempt to mkdir in forbidden path:", p);
+    return p;
   }
-  return origMkdirSync.call(fs, path, options);
+  return origMkdirSync(p, options);
 };
 
-// Patch writeFileSync
-const origWriteFileSync = fs.writeFileSync;
-fs.writeFileSync = function (p: fs.PathLike, data: any, options?: any) {
+// Patch writeFileSync safely
+const origWriteFileSync = fs.writeFileSync.bind(fs);
+(fs as any).writeFileSync = function (p: any, data: any, options?: any) {
   if (typeof p === "string" && p.includes("/var/task/src/uploads")) {
     console.warn("⚠️ Blocked attempt to write in forbidden path:", p);
-    return; // تجاهل الكتابة
+    return;
   }
-  return origWriteFileSync.call(fs, p, data, options);
+  return origWriteFileSync(p, data, options);
 };
 
 // Logger setup
