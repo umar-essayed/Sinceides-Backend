@@ -7,7 +7,8 @@ import bcrypt from 'bcryptjs';
 import passport from 'passport';
 import { Strategy as LocalStrategy } from 'passport-local';
 import * as jwt from 'jsonwebtoken';
-import multer, { FileFilterCallback } from 'multer';
+import multer from 'multer';
+import type { FileFilterCallback } from 'multer';
 import helmet from 'helmet';
 import cors from 'cors';
 import rateLimit from "express-rate-limit";
@@ -3927,7 +3928,7 @@ class UploadMiddleware {
   static setup() {
     const storage = multer.memoryStorage();
 
-    const fileFilter = (req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
+    const fileFilter: multer.Options['fileFilter'] = (req, file, cb) => {
       const imageMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
       const videoMimes = ['video/mp4', 'video/quicktime', 'video/x-msvideo'];
       const docMimes = [
