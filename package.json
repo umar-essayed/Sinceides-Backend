@@ -9,7 +9,8 @@
     "build": "tsc",
     "seed": "ts-node src/server.ts --seed-only",
     "snapshot": "ts-node src/server.ts --snapshot",
-    "restore-snapshot": "ts-node src/server.ts --restore-from-snapshot"
+    "restore-snapshot": "ts-node src/server.ts --restore-from-snapshot",
+    "vercel-build": "npm run build && npm prune --production"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

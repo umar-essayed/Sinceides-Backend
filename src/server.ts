@@ -5083,19 +5083,31 @@ function stop() {
 // Main execution
 handleCliCommands().then(() => {
   // Start server if not running CLI command
-  if (!process.argv.some(arg => arg.startsWith('--'))) {
-    app.listen(PORT, async () => {
-      await seedDatabase();
-      logger.info(`Server running on port ${PORT}`);
-      logger.info(`Swagger docs: http://localhost:${PORT}/docs`);
-      logger.info(`Firestore: ${firebaseProjectId} (prefix: ${firestorePrefix})`);
-      logger.info(`Redis: ${redisClient.status === 'ready' ? 'connected' : 'disconnected'}`);
-      logger.info(`Admin credentials: admin@example.com / Passw0rd!`);
-      logger.info(`Uploads dir: ${path.resolve(UPLOAD_DIR)}`);
-      logger.info(`Data dir: ${path.resolve(DATA_DIR)}`);
-    });
-  }
+  // Main execution - only run if not in serverless environment
+if (!process.env.VERCEL && !process.env.NETLIFY) {
+  handleCliCommands().then(() => {
+    // Start server if not running CLI command
+    if (!process.argv.some(arg => arg.startsWith('--'))) {
+      app.listen(PORT, async () => {
+        await seedDatabase();
+        logger.info(`Server running on port ${PORT}`);
+        logger.info(`Swagger docs: http://localhost:${PORT}/docs`);
+        logger.info(`Firestore: ${firebaseProjectId} (prefix: ${firestorePrefix})`);
+        logger.info(`Redis: ${redisClient.status === 'ready' ? 'connected' : 'disconnected'}`);
+        logger.info(`Admin credentials: admin@example.com / Passw0rd!`);
+        logger.info(`Uploads dir: ${path.resolve(UPLOAD_DIR)}`);
+        logger.info(`Data dir: ${path.resolve(DATA_DIR)}`);
+      });
+    }
+  });
+}
 });
 
-// Export for testing
+// Export for Vercel serverless functions
+export default async function handler(req: Request, res: Response) {
+  // Handle serverless function invocation
+  return app(req, res);
+}
+
+// Export the app for testing and other purposes
 export { app, start, stop };
