@@ -199,9 +199,9 @@ const JWT_SECRET = process.env.JWT_SECRET || 'secret';
 const JWT_ACCESS_EXPIRY = process.env.JWT_ACCESS_EXPIRY || '15m';
 const JWT_REFRESH_EXPIRY = process.env.JWT_REFRESH_EXPIRY || '7d';
 
-const UPLOAD_DIR = '/tmp/uploads';
-const DATA_DIR = '/tmp/data';
-const LOG_DIR = '/tmp/logs';
+const UPLOAD_DIR = '/tmp/';
+const DATA_DIR = '/tmp/';
+const LOG_DIR = '/tmp/';
 
 // Logger setup
 const logger = winston.createLogger({
