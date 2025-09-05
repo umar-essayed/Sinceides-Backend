@@ -3928,7 +3928,7 @@ class UploadMiddleware {
   static setup() {
     const storage = multer.memoryStorage();
 
-    const fileFilter: multer.Options['fileFilter'] = (req, file, cb) => {
+    const fileFilter = (req: Request, file: Express.Multer.File, cb: FileFilterCallback): void => {
       const imageMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
       const videoMimes = ['video/mp4', 'video/quicktime', 'video/x-msvideo'];
       const docMimes = [
