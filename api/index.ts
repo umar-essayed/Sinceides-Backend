@@ -69,42 +69,45 @@ declare global {
 }
 let firebaseProjectId: string; // أضف هذا في أعلى الملف
 
+// قراءة متغير البيئة
+const firebaseCredentials = process.env.FIREBASE_CREDENTIALS;
 
-// مسار ملف الـ JSON
-const serviceAccountPath = path.resolve(__dirname, "config", "sinceidesv2-firebase-adminsdk-fbsvc-22bac469f1.json");
-
-// التحقق من وجود الملف
-if (!fs.existsSync(serviceAccountPath)) {
-    console.error("❌ Firebase service account file not found at:", serviceAccountPath);
-    process.exit(1);
+if (!firebaseCredentials) {
+  console.error("❌ FIREBASE_CREDENTIALS environment variable is not set!");
+  process.exit(1);
 }
 
-// استدعاء الملف
-const serviceAccount = require(serviceAccountPath);
+// تحويل النص JSON إلى Object
+let serviceAccount;
+try {
+  serviceAccount = JSON.parse(firebaseCredentials);
+} catch (err) {
+  console.error("❌ Failed to parse FIREBASE_CREDENTIALS:", err);
+  process.exit(1);
+}
 
 console.log("Initializing Firebase...");
 try {
-
   if (admin.apps.length === 0) {
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
       databaseURL: `https://${serviceAccount.project_id}.firebaseio.com`,
-      storageBucket: `${serviceAccount.project_id}.appspot.com` // أضف هذا
+      storageBucket: `${serviceAccount.project_id}.appspot.com`
     });
-    firebaseProjectId = serviceAccount.project_id;
+
+    const firebaseProjectId = serviceAccount.project_id;
+
     console.log("✅ Firebase Admin initialized successfully");
-    console.log(`Project ID: ${serviceAccount.project_id}`);
-    console.log(`Storage Bucket: ${serviceAccount.project_id}.appspot.com`);
+    console.log(`Project ID: ${firebaseProjectId}`);
+    console.log(`Storage Bucket: ${firebaseProjectId}.appspot.com`);
   } else {
-    // استخدام التطبيق الحالي إذا كان موجودًا
     admin.app();
     console.log("✅ Using existing Firebase app");
   }
 } catch (error) {
-    console.error("❌ Firebase Admin initialization error:", error);
-    process.exit(1);
+  console.error("❌ Firebase Admin initialization error:", error);
+  process.exit(1);
 }
-
 // Initialize Firebase Storage
 class FirebaseStorageService {
   constructor(private bucket: Bucket) {}
