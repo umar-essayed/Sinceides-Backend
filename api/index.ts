@@ -5,13 +5,13 @@ import { Bucket } from '@google-cloud/storage'; // أضف هذا الاستير�
 import path from "path";
 import bcrypt from 'bcryptjs';
 import passport from 'passport';
-import {  as Local } from 'passport-local';
+import { Strategy as LocalStrategy } from 'passport-local';
 import * as jwt from 'jsonwebtoken';
 import multer, { FileFilterCallback } from 'multer';
 import helmet from 'helmet';
 import cors from 'cors';
 import rateLimit from "express-rate-limit";
-import {  as Jwt, ExtractJwt } from "passport-jwt";
+import { Strategy as JwtStrategy, ExtractJwt } from "passport-jwt";
 import compression from 'compression';
 import { z, ZodError } from 'zod';
 import winston from 'winston';
@@ -1453,7 +1453,7 @@ async get<T>(key: string): Promise<T | null> {
 
   async set<T>(key: string, value: T, ttl: number): Promise<boolean> {
     try {
-      await this.redisClient.set(key, JSON.stringify(value), 'EX', ttl);
+      await this.redisClient.setex(key, ttl, JSON.stringify(value));
       return true;
     } catch (error) {
       logger.warn(`Redis set error: ${error}`);
@@ -3925,25 +3925,25 @@ class UploadMiddleware {
     const storage = multer.memoryStorage(); // Use memory storage for serverless environments
 
     const fileFilter = (req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
-      const imageMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-      const videoMimes = ['video/mp4', 'video/quicktime', 'video/x-msvideo'];
-      const docMimes = [
-        'application/pdf', 
-        'application/msword', 
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 
-        'application/zip'
-      ];
+  const imageMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+  const videoMimes = ['video/mp4', 'video/quicktime', 'video/x-msvideo'];
+  const docMimes = [
+    'application/pdf', 
+    'application/msword', 
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 
+    'application/zip'
+  ];
 
-      if (file.fieldname === 'profile' || file.fieldname === 'thumbnail') {
-        if (imageMimes.includes(file.mimetype)) return cb(null, true);
-      } else if (file.fieldname === 'video') {
-        if (videoMimes.includes(file.mimetype)) return cb(null, true);
-      } else if (file.fieldname === 'attachment') {
-        if (docMimes.includes(file.mimetype)) return cb(null, true);
-      }
+  if (file.fieldname === 'profile' || file.fieldname === 'thumbnail') {
+    if (imageMimes.includes(file.mimetype)) return cb(null, true);
+  } else if (file.fieldname === 'video') {
+    if (videoMimes.includes(file.mimetype)) return cb(null, true);
+  } else if (file.fieldname === 'attachment') {
+    if (docMimes.includes(file.mimetype)) return cb(null, true);
+  }
 
-      cb(new Error(`Invalid file type: ${file.mimetype}`));
-    };
+  cb(new Error(`Invalid file type: ${file.mimetype}`));
+};
 
     return multer({
       storage,
