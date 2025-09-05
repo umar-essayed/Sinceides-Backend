@@ -204,17 +204,24 @@ const DATA_DIR = '/tmp/';
 const LOG_DIR = '/tmp/';
 
 // Logger setup
+const transports: winston.transport[] = [
+  new winston.transports.Console()
+];
+
+if (process.env.NODE_ENV !== 'production') {
+  transports.push(
+    new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
+    new winston.transports.File({ filename: 'logs/combined.log' })
+  );
+}
+
 const logger = winston.createLogger({
   level: 'info',
   format: winston.format.combine(
     winston.format.timestamp(),
     winston.format.json()
   ),
-  transports: [
-    new winston.transports.Console(),
-    new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
-    new winston.transports.File({ filename: 'logs/combined.log' }),
-  ],
+  transports
 });
 
 // Custom error class
@@ -4680,7 +4687,13 @@ app.use(
 app.use(morgan('combined', { stream: { write: (message: string) => logger.info(message.trim()) } }));
 app.use(RequestIdMiddleware.generate());
 app.use(AuthMiddleware.initializePassport());
-app.use('/uploads', express.static(UPLOAD_DIR));
+// إزالة هذا السطر أو تعديله:
+// app.use('/uploads', express.static(UPLOAD_DIR));
+
+// يمكنك استبداله بـ:
+app.use('/uploads', (req, res) => {
+  res.status(404).json({ error: 'Static file serving is disabled in serverless environment' });
+});
 
 // Swagger setup
 const swaggerOptions = {
