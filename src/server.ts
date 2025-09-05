@@ -198,6 +198,9 @@ const JWT_SECRET = process.env.JWT_SECRET || 'secret';
 const JWT_ACCESS_EXPIRY = process.env.JWT_ACCESS_EXPIRY || '15m';
 const JWT_REFRESH_EXPIRY = process.env.JWT_REFRESH_EXPIRY || '7d';
 
+const UPLOAD_DIR = '/tmp/uploads';
+const DATA_DIR = '/tmp/data';
+const LOG_DIR = '/tmp/logs';
 
 // Logger setup
 const logger = winston.createLogger({
@@ -2322,7 +2325,7 @@ class ReportService {
 
   async exportReport(report: UserReport, format: ExportFormat): Promise<string> {
     const fileName = `user-report-${report.user.id}-${Date.now()}.${format}`;
-    const tempFilePath = path.join(DATA_DIR, fileName);
+    const tempFilePath = path.join('/tmp', fileName);
 
     if (format === ExportFormat.CSV) {
       const csvWriter = csv.createObjectCsvWriter({
@@ -2545,7 +2548,7 @@ class SnapshotService {
     ];
 
     const timestamp = dayjs().format('YYYYMMDD-HHmmss');
-    const snapshotDir = path.join(DATA_DIR, `snapshot-${timestamp}`);
+    const snapshotDir = path.join('/tmp', `snapshot-${timestamp}`);
     if (!fs.existsSync(snapshotDir)) fs.mkdirSync(snapshotDir, { recursive: true });
 
     for (const collection of collections) {
