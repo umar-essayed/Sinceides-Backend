@@ -82,13 +82,21 @@ const serviceAccount = require(serviceAccountPath);
 
 console.log("Initializing Firebase...");
 try {
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-  databaseURL: `https://${serviceAccount.project_id}.firebaseio.com`,
-});
-firebaseProjectId = serviceAccount.project_id; // احفظ قيمة project_id
+  // Check if Firebase is already initialized
+  if (!admin.apps.length) {
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+      databaseURL: `https://${serviceAccount.project_id}.firebaseio.com`,
+    });
+    firebaseProjectId = serviceAccount.project_id;
     console.log("✅ Firebase Admin initialized successfully");
-    console.log(`Project ID: ${serviceAccount.project_id}`); // إضافة هذه السطر
+    console.log(`Project ID: ${serviceAccount.project_id}`);
+  } else {
+    // Use existing app
+    admin.app();
+    firebaseProjectId = serviceAccount.project_id;
+    console.log("✅ Using existing Firebase app");
+  }
 } catch (error) {
     console.error("❌ Firebase Admin initialization error:", error);
     process.exit(1);
