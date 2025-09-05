@@ -3925,29 +3925,28 @@ class RequestIdMiddleware {
 
 class UploadMiddleware {
   static setup() {
-    const storage = multer.memoryStorage(); // Use memory storage for serverless environments
+    const storage = multer.memoryStorage();
 
-    // استبدال السطر 3927 بـ:
-const fileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
-  const imageMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-  const videoMimes = ['video/mp4', 'video/quicktime', 'video/x-msvideo'];
-  const docMimes = [
-    'application/pdf', 
-    'application/msword', 
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 
-    'application/zip'
-  ];
+    const fileFilter = (req: Request, file: Express.Multer.File, cb: (error: Error | null, acceptFile: boolean) => void) => {
+      const imageMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+      const videoMimes = ['video/mp4', 'video/quicktime', 'video/x-msvideo'];
+      const docMimes = [
+        'application/pdf', 
+        'application/msword', 
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 
+        'application/zip'
+      ];
 
-  if (file.fieldname === 'profile' || file.fieldname === 'thumbnail') {
-    if (imageMimes.includes(file.mimetype)) return cb(null, true);
-  } else if (file.fieldname === 'video') {
-    if (videoMimes.includes(file.mimetype)) return cb(null, true);
-  } else if (file.fieldname === 'attachment') {
-    if (docMimes.includes(file.mimetype)) return cb(null, true);
-  }
+      if (file.fieldname === 'profile' || file.fieldname === 'thumbnail') {
+        if (imageMimes.includes(file.mimetype)) return cb(null, true);
+      } else if (file.fieldname === 'video') {
+        if (videoMimes.includes(file.mimetype)) return cb(null, true);
+      } else if (file.fieldname === 'attachment') {
+        if (docMimes.includes(file.mimetype)) return cb(null, true);
+      }
 
-  cb(new Error(`Invalid file type: ${file.mimetype}`));
-};
+      cb(new Error(`Invalid file type: ${file.mimetype}`), false);
+    };
 
     return multer({
       storage,
