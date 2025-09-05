@@ -197,13 +197,7 @@ const PORT = parseInt(process.env.PORT || '4000');
 const JWT_SECRET = process.env.JWT_SECRET || 'secret';
 const JWT_ACCESS_EXPIRY = process.env.JWT_ACCESS_EXPIRY || '15m';
 const JWT_REFRESH_EXPIRY = process.env.JWT_REFRESH_EXPIRY || '7d';
-const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, 'uploads');
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 
-// Create directories if not exists
-[UPLOAD_DIR, DATA_DIR, path.join(__dirname, 'logs')].forEach(dir => {
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-});
 
 // Logger setup
 const logger = winston.createLogger({
