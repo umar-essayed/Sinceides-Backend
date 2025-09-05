@@ -67,7 +67,7 @@ declare global {
 }
 let firebaseProjectId: string; // أضف هذا في أعلى الملف
 
-// مسار ملف الـ JSON
+
 // مسار ملف الـ JSON
 const serviceAccountPath = path.resolve(__dirname, "config", "sinceidesv2-firebase-adminsdk-fbsvc-22bac469f1.json");
 
@@ -82,8 +82,8 @@ const serviceAccount = require(serviceAccountPath);
 
 console.log("Initializing Firebase...");
 try {
-  // Check if Firebase is already initialized
-  if (!admin.apps.length) {
+  // التحقق إذا كان Firebase قد تم تهيئته مسبقًا
+  if (admin.apps.length === 0) {
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
       databaseURL: `https://${serviceAccount.project_id}.firebaseio.com`,
@@ -92,15 +92,19 @@ try {
     console.log("✅ Firebase Admin initialized successfully");
     console.log(`Project ID: ${serviceAccount.project_id}`);
   } else {
-    // Use existing app
+    // استخدام التطبيق الحالي إذا كان موجودًا
     admin.app();
-    firebaseProjectId = serviceAccount.project_id;
     console.log("✅ Using existing Firebase app");
   }
 } catch (error) {
     console.error("❌ Firebase Admin initialization error:", error);
     process.exit(1);
 }
+
+// باقي الكود...
+
+
+
 const db = admin.firestore();
 const firestoreEnabled = process.env.FIRESTORE_ENABLED !== 'false';
 const firestorePrefix = process.env.FIRESTORE_PREFIX || 'prod';
