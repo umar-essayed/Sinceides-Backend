@@ -83,15 +83,17 @@ const serviceAccount = require(serviceAccountPath);
 
 console.log("Initializing Firebase...");
 try {
-  // التحقق إذا كان Firebase قد تم تهيئته مسبقًا
+
   if (admin.apps.length === 0) {
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
       databaseURL: `https://${serviceAccount.project_id}.firebaseio.com`,
+      storageBucket: `${serviceAccount.project_id}.appspot.com` // أضف هذا
     });
     firebaseProjectId = serviceAccount.project_id;
     console.log("✅ Firebase Admin initialized successfully");
     console.log(`Project ID: ${serviceAccount.project_id}`);
+    console.log(`Storage Bucket: ${serviceAccount.project_id}.appspot.com`);
   } else {
     // استخدام التطبيق الحالي إذا كان موجودًا
     admin.app();
@@ -102,7 +104,6 @@ try {
     process.exit(1);
 }
 
-// باقي الكود...
 // Initialize Firebase Storage
 class FirebaseStorageService {
   constructor(private bucket: Bucket) {}
@@ -167,7 +168,7 @@ class FirebaseStorageService {
 }
 
 
-const bucket = admin.storage().bucket(`${serviceAccount.project_id}.appspot.com`);
+const bucket = admin.storage().bucket() as unknown as Bucket;
 const firebaseStorageService = new FirebaseStorageService(bucket);
 
 
