@@ -209,9 +209,10 @@ const transports: winston.transport[] = [
 ];
 
 if (process.env.NODE_ENV !== 'production') {
+  // في بيئة التطوير، استخدم Console فقط لتجنب مشاكل Vercel
   transports.push(
-    new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
-    new winston.transports.File({ filename: 'logs/combined.log' })
+    new winston.transports.Console({ level: 'error' }),
+    new winston.transports.Console({ level: 'info' })
   );
 }
 
