@@ -5,13 +5,13 @@ import { Bucket } from '@google-cloud/storage'; // أضف هذا الاستير�
 import path from "path";
 import bcrypt from 'bcryptjs';
 import passport from 'passport';
-import { Strategy as LocalStrategy } from 'passport-local';
+import {  as Local } from 'passport-local';
 import * as jwt from 'jsonwebtoken';
 import multer, { FileFilterCallback } from 'multer';
 import helmet from 'helmet';
 import cors from 'cors';
 import rateLimit from "express-rate-limit";
-import { Strategy as JwtStrategy, ExtractJwt } from "passport-jwt";
+import {  as Jwt, ExtractJwt } from "passport-jwt";
 import compression from 'compression';
 import { z, ZodError } from 'zod';
 import winston from 'winston';
@@ -3075,7 +3075,7 @@ class ExamService {
     
     const chunks: any[] = [];
     
-    doc.on('data', (chunk) => chunks.push(chunk));
+    doc.on('data', (chunk: any) => chunks.push(chunk));
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
 
@@ -3821,14 +3821,14 @@ class AuthMiddleware {
   }
 
   static initializePassport() {
-    // Local Strategy for email/password login
+    // Local  for email/password login
     passport.use(
-      new LocalStrategy(
+      new Local(
         {
           usernameField: 'email',
           passwordField: 'password'
         },
-        async (email: string, password: string, done) => {
+        async (email: string, password: string, done: (error: any, user?: any) => void) => {
           try {
             const user = await userRepo.findByEmail(email);
             if (!user) return done(null, false, { message: 'Invalid credentials' });
@@ -3845,11 +3845,11 @@ class AuthMiddleware {
       )
     );
 
-    // JWT Strategy for bearer token authentication
+    // JWT  for bearer token authentication
     // In AuthMiddleware, ensure JWT payload is properly parsed
 // In AuthMiddleware class
   passport.use(
-    new JwtStrategy(
+    new Jwt(
       {
         jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
         secretOrKey: JWT_SECRET,
@@ -3875,11 +3875,11 @@ class AuthMiddleware {
   );
 
 
-    passport.serializeUser((user: User, done) => {
+    passport.serializeUser((user: User, done: (err: any, id?: string) => void) =>  {
       done(null, user.id);
     });
 
-    passport.deserializeUser(async (id: string, done) => {
+    passport.deserializeUser(async (id: string, done: (err: any, user?: any) => void) =>  {
       try {
         const user = await userRepo.findById(id, true);
         if (!user || user.deletedAt) {
